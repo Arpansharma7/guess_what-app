@@ -8,6 +8,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
 nltk.download("punkt")
+nltk.download("punkt_tab")
 nltk.download("stopwords")
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -160,3 +161,4 @@ with right:
 
 # ---------------- FOOTER ----------------
 st.markdown('<div class="small" style="margin-top:16px;">An end-to-end NLP application</div>', unsafe_allow_html=True)
+
