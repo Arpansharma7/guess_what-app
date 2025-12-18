@@ -2,14 +2,19 @@ import streamlit as st
 import pandas as pd
 import nltk
 import string
+import numpy as np
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
 
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+
+# ---------------- NLTK ----------------
 nltk.download("punkt")
-nltk.download("punkt_tab")
 nltk.download("stopwords")
+
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
     page_title="Sentiment AI",
@@ -17,7 +22,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CSS (VISIBLE UPGRADE) ----------------
+# ---------------- CSS ----------------
 st.markdown("""
 <style>
 body {
@@ -56,7 +61,6 @@ body {
     font-size: 36px;
     font-weight: 800;
     color: #f9fafb;
-    margin-bottom: 4px;
 }
 .sub {
     color: #cbd5f5;
@@ -78,7 +82,7 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- APP SHELL ----------------
+# ---------------- HEADER ----------------
 st.markdown("""
 <div class="app-shell">
   <div class="brand">Sentiment AI</div>
@@ -86,7 +90,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- NLP ----------------
+# ---------------- TEXT PREPROCESSING ----------------
 def normalized(text):
     text = str(text).lower()
     tokens = word_tokenize(text)
@@ -94,7 +98,7 @@ def normalized(text):
     cleaned = [w for w in tokens if w not in stop_words and w not in string.punctuation]
     return " ".join(cleaned)
 
-# ---------------- TRAIN ONCE (CACHED) ----------------
+# ---------------- TRAIN MODEL (NN) ----------------
 @st.cache_resource
 def train_model():
     df = pd.read_csv("tweets.csv", header=None)
@@ -106,14 +110,35 @@ def train_model():
     df["clean_text"] = df["text"].apply(normalized)
 
     vectorizer = TfidfVectorizer(
-        max_features=5000,
+        max_features=8000,
         ngram_range=(1, 2)
     )
-    X = vectorizer.fit_transform(df["clean_text"])
-    y = df["sentiment"]
 
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X, y)
+    X = vectorizer.fit_transform(df["clean_text"]).toarray()
+    y = df["sentiment"].values
+
+    model = Sequential([
+        Dense(256, activation="relu", input_shape=(X.shape[1],)),
+        Dropout(0.4),
+        Dense(128, activation="relu"),
+        Dropout(0.3),
+        Dense(1, activation="sigmoid")
+    ])
+
+    model.compile(
+        optimizer=Adam(learning_rate=0.001),
+        loss="binary_crossentropy",
+        metrics=["accuracy"]
+    )
+
+    model.fit(
+        X, y,
+        epochs=6,
+        batch_size=256,
+        validation_split=0.1,
+        verbose=0
+    )
+
     return model, vectorizer
 
 model, vectorizer = train_model()
@@ -124,7 +149,7 @@ left, right = st.columns([1.25, 1])
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="h1">Sentiment Analyzer</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub">Analyze tweets with a fast classical ML pipeline.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub">Neural Network based sentiment analysis</div>', unsafe_allow_html=True)
 
     user_text = st.text_area(
         "Enter a text",
@@ -141,10 +166,11 @@ with right:
 
     if analyze and user_text.strip():
         cleaned = normalized(user_text)
-        X_test = vectorizer.transform([cleaned])
-        pred = model.predict(X_test)[0]
-        prob = model.predict_proba(X_test)[0]
-        confidence = float(prob[pred])
+        X_test = vectorizer.transform([cleaned]).toarray()
+
+        prob = float(model.predict(X_test, verbose=0)[0][0])
+        pred = 1 if prob >= 0.5 else 0
+        confidence = prob if pred == 1 else 1 - prob
 
         if pred == 1:
             st.markdown('<div class="result-pos">Positive Sentiment</div>', unsafe_allow_html=True)
@@ -160,5 +186,7 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------- FOOTER ----------------
-st.markdown('<div class="small" style="margin-top:16px;">An end-to-end NLP application</div>', unsafe_allow_html=True)
-
+st.markdown(
+    '<div class="small" style="margin-top:16px;">Neural Network based NLP application</div>',
+    unsafe_allow_html=True
+)
